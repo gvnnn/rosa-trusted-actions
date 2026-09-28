@@ -43,10 +43,6 @@ linters:
       check-type-assertions: true
       check-blank: false
 
-  exclusions:
-    presets:
-      - std-error-handling
-
     gocyclo:
       min-complexity: 15
 
@@ -60,13 +56,12 @@ linters:
         - typo: openshit
           correction: OpenShift
 
+  exclusions:
+    presets:
+      - std-error-handling
+
 run:
   timeout: 5m
-  # Only check new code, not existing issues
-  # This uses git to compare against the base branch (typically master/main)
-  new: true
-  # Alternatively, you can specify a specific revision:
-  # new-from-rev: origin/master
 
 formatters:
   enable:
@@ -76,3 +71,5 @@ formatters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  # Show only new issues created after the best common ancestor (merge-base against HEAD).
+  new-from-merge-base: main
