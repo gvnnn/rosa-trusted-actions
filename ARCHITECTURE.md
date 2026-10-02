@@ -165,10 +165,10 @@ Logs include:
 2. **Execute action**: `POST /{action}/run` (returns `202 Accepted` with execution ID)
 3. **Poll for completion**: `GET /runs/{id}` (metadata only by default)
 4. **Retrieve results**: `GET /runs/{id}?include=output,logs` (opt-in content)
-5. **Audit and reporting**: `GET /runs` (filter executions) or `GET /audit` (API call log)
+5. **Audit and reporting**: `GET /runs` (filter executions)
 
 ### Storage Architecture
 
 - **S3**: Execution outputs and logs stored as objects
-- **Database**: Execution metadata, audit entries, and trusted action definitions
+- **Database**: Execution metadata and trusted action definitions
 - **Key Structure**: S3 objects partitioned by account, cluster, and execution ID

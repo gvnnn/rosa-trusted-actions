@@ -21,50 +21,50 @@ echo "======================================="
 
 # Function to test an endpoint
 test_endpoint() {
-    local name="$1"
-    local method="$2"
-    local url="$3"
-    local data="$4"
+	local name="$1"
+	local method="$2"
+	local url="$3"
+	local data="$4"
 
-    echo -n "Testing $name... "
+	echo -n "Testing $name... "
 
-    if [ "$method" = "POST" ]; then
-        response=$(curl -s -w "%{http_code}" -X POST "$url" \
-            -H "Content-Type: application/json" \
-            -d "$data" \
-            -o /tmp/api_response.json)
-    else
-        response=$(curl -s -w "%{http_code}" "$url" -o /tmp/api_response.json)
-    fi
+	if [ "$method" = "POST" ]; then
+		response=$(curl -s -w "%{http_code}" -X POST "$url" \
+			-H "Content-Type: application/json" \
+			-d "$data" \
+			-o /tmp/api_response.json)
+	else
+		response=$(curl -s -w "%{http_code}" "$url" -o /tmp/api_response.json)
+	fi
 
-    http_code="${response: -3}"
+	http_code="${response: -3}"
 
-    if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
-        echo -e "${GREEN}✓ ($http_code)${NC}"
-        # Pretty print JSON if jq is available
-        if command -v jq &> /dev/null; then
-            echo "Response:" && jq . /tmp/api_response.json | head -20
-        else
-            echo "Response:" && cat /tmp/api_response.json | head -20
-        fi
-        echo ""
-        return 0
-    else
-        echo -e "${RED}✗ ($http_code)${NC}"
-        echo "Response:" && cat /tmp/api_response.json
-        echo ""
-        return 1
-    fi
+	if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+		echo -e "${GREEN}✓ ($http_code)${NC}"
+		# Pretty print JSON if jq is available
+		if command -v jq &>/dev/null; then
+			echo "Response:" && jq . /tmp/api_response.json | head -20
+		else
+			echo "Response:" && cat /tmp/api_response.json | head -20
+		fi
+		echo ""
+		return 0
+	else
+		echo -e "${RED}✗ ($http_code)${NC}"
+		echo "Response:" && cat /tmp/api_response.json
+		echo ""
+		return 1
+	fi
 }
 
 # Check if server is running
 echo -n "Checking server health... "
-if curl -s "$SERVER_URL/health" > /dev/null; then
-    echo -e "${GREEN}✓ Server is running${NC}"
+if curl -s "$SERVER_URL/health" >/dev/null; then
+	echo -e "${GREEN}✓ Server is running${NC}"
 else
-    echo -e "${RED}✗ Server is not responding${NC}"
-    echo "Make sure the server is running with: make run"
-    exit 1
+	echo -e "${RED}✗ Server is not responding${NC}"
+	echo "Make sure the server is running with: make run"
+	exit 1
 fi
 
 echo ""
@@ -80,6 +80,5 @@ test_endpoint "Execute Action" "POST" "$API_BASE/get/run" '{
 }'
 test_endpoint "List Executions" "GET" "$API_BASE/runs?limit=5"
 test_endpoint "Get Execution" "GET" "$API_BASE/runs/$(uuidgen)?include=output,logs"
-test_endpoint "Audit Log" "GET" "$API_BASE/audit?limit=5"
 
 echo -e "${GREEN}All tests completed!${NC}"

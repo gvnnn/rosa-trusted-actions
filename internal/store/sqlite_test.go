@@ -387,130 +387,6 @@ func TestSQLiteStore_ClaimNextExecution_NotFound(t *testing.T) {
 	}
 }
 
-func TestSQLiteStore_CreateAuditEntry(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-
-	entry := &models.AuditEntry{
-		ID:         uuid.New(),
-		Timestamp:  time.Now().UTC().Truncate(time.Microsecond),
-		Method:     "POST",
-		Path:       "/api/v0/trusted-actions/cluster-info/run",
-		Username:   "test-user",
-		StatusCode: 202,
-	}
-
-	if err := s.CreateAuditEntry(ctx, entry); err != nil {
-		t.Fatalf("CreateAuditEntry failed: %v", err)
-	}
-
-	result, err := s.ListAuditEntries(ctx, AuditFilter{})
-	if err != nil {
-		t.Fatalf("ListAuditEntries failed: %v", err)
-	}
-
-	if result.Total != 1 {
-		t.Errorf("Total: got %d, want 1", result.Total)
-	}
-	if result.Items[0].ID != entry.ID {
-		t.Errorf("ID: got %v, want %v", result.Items[0].ID, entry.ID)
-	}
-	if result.Items[0].Method != "POST" {
-		t.Errorf("Method: got %s, want POST", result.Items[0].Method)
-	}
-}
-
-func TestSQLiteStore_ListAuditEntries_FilterByAction(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-
-	action1 := "cluster-info"
-	action2 := "pod-restart"
-
-	if err := s.CreateAuditEntry(ctx, &models.AuditEntry{
-		ID: uuid.New(), Timestamp: time.Now().UTC(), Method: "POST",
-		Path: "/run", Username: "user1", StatusCode: 202, Action: &action1,
-	}); err != nil {
-		t.Fatalf("CreateAuditEntry action1 failed: %v", err)
-	}
-	if err := s.CreateAuditEntry(ctx, &models.AuditEntry{
-		ID: uuid.New(), Timestamp: time.Now().UTC(), Method: "POST",
-		Path: "/run", Username: "user1", StatusCode: 202, Action: &action2,
-	}); err != nil {
-		t.Fatalf("CreateAuditEntry action2 failed: %v", err)
-	}
-
-	result, err := s.ListAuditEntries(ctx, AuditFilter{Action: &action1})
-	if err != nil {
-		t.Fatalf("ListAuditEntries failed: %v", err)
-	}
-
-	if result.Total != 1 {
-		t.Errorf("Total: got %d, want 1", result.Total)
-	}
-}
-
-func TestSQLiteStore_ListAuditEntries_FilterByMethod(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-
-	if err := s.CreateAuditEntry(ctx, &models.AuditEntry{
-		ID: uuid.New(), Timestamp: time.Now().UTC(), Method: "POST",
-		Path: "/run", Username: "user1", StatusCode: 202,
-	}); err != nil {
-		t.Fatalf("CreateAuditEntry POST failed: %v", err)
-	}
-	if err := s.CreateAuditEntry(ctx, &models.AuditEntry{
-		ID: uuid.New(), Timestamp: time.Now().UTC(), Method: "GET",
-		Path: "/runs", Username: "user1", StatusCode: 200,
-	}); err != nil {
-		t.Fatalf("CreateAuditEntry GET failed: %v", err)
-	}
-
-	method := "GET"
-	result, err := s.ListAuditEntries(ctx, AuditFilter{Method: &method})
-	if err != nil {
-		t.Fatalf("ListAuditEntries failed: %v", err)
-	}
-
-	if result.Total != 1 {
-		t.Errorf("Total: got %d, want 1", result.Total)
-	}
-}
-
-func TestSQLiteStore_AuditEntry_ForeignKeyConstraint(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-
-	bogusExecID := uuid.New().String()
-	err := s.CreateAuditEntry(ctx, &models.AuditEntry{
-		ID: uuid.New(), Timestamp: time.Now().UTC(), Method: "POST",
-		Path: "/run", Username: "user1", StatusCode: 202, ExecutionID: &bogusExecID,
-	})
-	if err == nil {
-		t.Error("expected foreign key violation for non-existent execution_id, got nil")
-	}
-}
-
-func TestSQLiteStore_AuditEntry_ValidForeignKey(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-
-	exec := testExecution("get", "cluster-1")
-	if err := s.CreateExecution(ctx, exec); err != nil {
-		t.Fatalf("CreateExecution failed: %v", err)
-	}
-
-	execID := exec.ID.String()
-	err := s.CreateAuditEntry(ctx, &models.AuditEntry{
-		ID: uuid.New(), Timestamp: time.Now().UTC(), Method: "POST",
-		Path: "/run", Username: "user1", StatusCode: 202, ExecutionID: &execID,
-	})
-	if err != nil {
-		t.Fatalf("CreateAuditEntry with valid execution_id failed: %v", err)
-	}
-}
-
 func TestSQLiteStore_MigrationsIdempotent(t *testing.T) {
 	s := newTestStore(t)
 
@@ -526,8 +402,8 @@ func TestSQLiteStore_RollbackLastMigration(t *testing.T) {
 		t.Fatalf("RollbackLastMigration failed: %v", err)
 	}
 
-	// The last migration (004) is index-only, so rollback drops the index
-	// without changing the table count.
+	// Rolling back 005 drops the executions_output table and its index, and
+	// restores the output_path/output_status columns on executions.
 	var version string
 	if err := s.db.Get(&version, "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1"); err != nil {
 		t.Fatalf("querying schema_migrations: %v", err)

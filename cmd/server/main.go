@@ -246,7 +246,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// BaseRouter to avoid an infinite routing loop from r.Mount("/", r).
 	router.Route("/api/v0/trusted-actions", func(r chi.Router) {
 		r.Use(authnMiddleware.AuthenticateAccountJWT)
-		r.Use(middleware.NewAuditLogger(dataStore, logger))
 		r.Use(authzMiddleware.AuthorizeAPI)
 		openapi.HandlerWithOptions(apiHandler, openapi.ChiServerOptions{
 			BaseRouter:  r,

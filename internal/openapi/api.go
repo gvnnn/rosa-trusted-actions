@@ -56,39 +56,6 @@ func (e ApprovalState) Valid() bool {
 	}
 }
 
-// Defines values for AuditEntryMethod.
-const (
-	AuditEntryMethodGET  AuditEntryMethod = "GET"
-	AuditEntryMethodPOST AuditEntryMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the AuditEntryMethod enum.
-func (e AuditEntryMethod) Valid() bool {
-	switch e {
-	case AuditEntryMethodGET:
-		return true
-	case AuditEntryMethodPOST:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AuditListKind.
-const (
-	AuditListKindAuditList AuditListKind = "AuditList"
-)
-
-// Valid indicates whether the value is a known member of the AuditListKind enum.
-func (e AuditListKind) Valid() bool {
-	switch e {
-	case AuditListKindAuditList:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ErrorKind.
 const (
 	ErrorKindError ErrorKind = "Error"
@@ -149,24 +116,6 @@ func (e Scope) Valid() bool {
 	}
 }
 
-// Defines values for ListAuditEntriesParamsMethod.
-const (
-	ListAuditEntriesParamsMethodGET  ListAuditEntriesParamsMethod = "GET"
-	ListAuditEntriesParamsMethodPOST ListAuditEntriesParamsMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the ListAuditEntriesParamsMethod enum.
-func (e ListAuditEntriesParamsMethod) Valid() bool {
-	switch e {
-	case ListAuditEntriesParamsMethodGET:
-		return true
-	case ListAuditEntriesParamsMethodPOST:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ListExecutionsParamsDryRun.
 const (
 	ListExecutionsParamsDryRunFalse ListExecutionsParamsDryRun = "false"
@@ -208,97 +157,6 @@ type ActionType string
 
 // ApprovalState Approval lifecycle for an execution
 type ApprovalState string
-
-// AuditEntry defines model for AuditEntry.
-type AuditEntry struct {
-	// Action TA name (populated for POST /run calls; empty otherwise)
-	//
-	// Example: get_pods
-	Action *string `json:"action,omitempty"`
-
-	// ApprovalState Approval state at time of POST (populated for POST /run calls; empty otherwise)
-	//
-	// Example: not_required
-	ApprovalState *string `json:"approval_state,omitempty"`
-
-	// ExecutionId Execution ID. For POST /run: the created ID. For GET /runs/{id}: the accessed ID. Empty otherwise.
-	//
-	// Example: 1a2cc9ec-fac0-43eb-ba2b-b3f1124f6aea
-	ExecutionId *string `json:"execution_id,omitempty"`
-
-	// Id Unique audit entry ID
-	//
-	// Example: e2f91a3b-...
-	Id openapi_types.UUID `json:"id"`
-
-	// Jira Jira ticket (populated for POST /run calls; empty otherwise)
-	//
-	// Example: ROSAENG-1234
-	Jira *string `json:"jira,omitempty"`
-
-	// Method HTTP method
-	Method AuditEntryMethod `json:"method"`
-
-	// Path Full request URI (path + query parameters)
-	//
-	// Example: /api/v0/trusted-actions/get_pods/run
-	Path string `json:"path"`
-
-	// StatusCode HTTP response status code
-	//
-	// Example: 202
-	StatusCode int `json:"status_code"`
-
-	// TargetCluster Target cluster (populated for POST /run calls; empty otherwise)
-	//
-	// Example: mc-useast1-1
-	TargetCluster *string `json:"target_cluster,omitempty"`
-
-	// Timestamp When the API call was made (nanosecond precision)
-	//
-	// Example: 2026-06-12T10:00:00.123456789Z
-	Timestamp time.Time `json:"timestamp"`
-
-	// Username OCM username of caller
-	//
-	// Example: srep-user
-	Username string `json:"username"`
-}
-
-// AuditEntryMethod HTTP method
-type AuditEntryMethod string
-
-// AuditList defines model for AuditList.
-type AuditList struct {
-	// HasMore Whether more results are available
-	//
-	// Example: false
-	HasMore bool `json:"has_more"`
-
-	// Items Audit log entries (sorted by timestamp descending)
-	Items []AuditEntry `json:"items"`
-
-	// Kind Always "AuditList"
-	Kind AuditListKind `json:"kind"`
-
-	// Limit Max results per page
-	//
-	// Example: 50
-	Limit int `json:"limit"`
-
-	// Page Current page number
-	//
-	// Example: 1
-	Page int `json:"page"`
-
-	// Total Total number of matching audit entries
-	//
-	// Example: 3
-	Total int `json:"total"`
-}
-
-// AuditListKind Always "AuditList"
-type AuditListKind string
 
 // Error defines model for Error.
 type Error struct {
@@ -590,36 +448,6 @@ type TrustedActionSummary struct {
 	Type ActionType `json:"type"`
 }
 
-// ListAuditEntriesParams defines parameters for ListAuditEntries.
-type ListAuditEntriesParams struct {
-	// Page Page number (1-based)
-	Page *int `form:"page,omitempty" json:"page,omitempty"`
-
-	// Limit Max results per page (1-200)
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
-
-	// Action Filter by Trusted Action name
-	Action *string `form:"action,omitempty" json:"action,omitempty"`
-
-	// Target Filter by target cluster
-	Target *string `form:"target,omitempty" json:"target,omitempty"`
-
-	// Operator Filter by operator name
-	Operator *string `form:"operator,omitempty" json:"operator,omitempty"`
-
-	// Method Filter by HTTP method
-	Method *ListAuditEntriesParamsMethod `form:"method,omitempty" json:"method,omitempty"`
-
-	// ApprovalState Filter by approval state
-	ApprovalState *ApprovalState `form:"approval_state,omitempty" json:"approval_state,omitempty"`
-
-	// Since Time filter. Accepts duration shorthand (30s, 5m, 1h, 24h, 7d) or RFC3339 timestamp.
-	Since *string `form:"since,omitempty" json:"since,omitempty"`
-}
-
-// ListAuditEntriesParamsMethod defines parameters for ListAuditEntries.
-type ListAuditEntriesParamsMethod string
-
 // ListExecutionsParams defines parameters for ListExecutions.
 type ListExecutionsParams struct {
 	// Page Page number (1-based)
@@ -673,9 +501,6 @@ type ServerInterface interface {
 	// Catalog List all available Trusted Actions
 	// (GET /)
 	Catalog(w http.ResponseWriter, r *http.Request)
-	// ListAuditEntries List API call audit log entries
-	// (GET /audit)
-	ListAuditEntries(w http.ResponseWriter, r *http.Request, params ListAuditEntriesParams)
 	// ListExecutions List executions
 	// (GET /runs)
 	ListExecutions(w http.ResponseWriter, r *http.Request, params ListExecutionsParams)
@@ -700,12 +525,6 @@ type Unimplemented struct{}
 // Catalog List all available Trusted Actions
 // (GET /)
 func (_ Unimplemented) Catalog(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// ListAuditEntries List API call audit log entries
-// (GET /audit)
-func (_ Unimplemented) ListAuditEntries(w http.ResponseWriter, r *http.Request, params ListAuditEntriesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -753,130 +572,6 @@ func (siw *ServerInterfaceWrapper) Catalog(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Catalog(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListAuditEntries operation middleware
-func (siw *ServerInterfaceWrapper) ListAuditEntries(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAuditEntriesParams
-
-	// ------------- Optional query parameter "page" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "action" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "target" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "target", r.URL.Query(), &params.Target, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "target"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "target", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "operator" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "operator", r.URL.Query(), &params.Operator, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "operator"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operator", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "method" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "method", r.URL.Query(), &params.Method, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "method"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "method", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "approval_state" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "approval_state", r.URL.Query(), &params.ApprovalState, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "approval_state"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "approval_state", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "since" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "since"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAuditEntries(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1296,9 +991,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/runs", wrapper.ListExecutions)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/audit", wrapper.ListAuditEntries)
 	})
 
 	return r

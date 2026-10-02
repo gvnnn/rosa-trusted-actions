@@ -16,7 +16,6 @@ import (
 
 	"github.com/openshift-online/rosa-trusted-actions/internal/auth"
 	"github.com/openshift-online/rosa-trusted-actions/internal/catalog"
-	"github.com/openshift-online/rosa-trusted-actions/internal/middleware"
 	"github.com/openshift-online/rosa-trusted-actions/internal/models"
 	"github.com/openshift-online/rosa-trusted-actions/internal/openapi"
 	"github.com/openshift-online/rosa-trusted-actions/internal/store"
@@ -118,17 +117,6 @@ func (h *APIHandler) CreateExecution(w http.ResponseWriter, r *http.Request, act
 
 	h.notifier.Notify()
 
-	if ac := middleware.GetAuditContext(r.Context()); ac != nil {
-		ac.ExecutionID = exec.ID.String()
-		ac.TargetCluster = exec.TargetCluster
-		if exec.Jira != nil {
-			ac.Jira = *exec.Jira
-		}
-		if exec.ApprovalState != nil {
-			ac.ApprovalState = *exec.ApprovalState
-		}
-	}
-
 	result := exec.ToOpenAPI()
 	result.UnderscoreLinks = &openapi.ExecutionLinks{
 		Self: openapi.HALLink{
@@ -139,83 +127,6 @@ func (h *APIHandler) CreateExecution(w http.ResponseWriter, r *http.Request, act
 
 	w.WriteHeader(http.StatusAccepted)
 	render.JSON(w, r, result)
-}
-
-// ListAuditEntries implements GET /audit
-// List API call audit log entries
-func (h *APIHandler) ListAuditEntries(w http.ResponseWriter, r *http.Request, params openapi.ListAuditEntriesParams) {
-	h.logger.Info("Listing audit entries")
-
-	filter := store.AuditFilter{
-		Action: params.Action,
-		Target: params.Target,
-	}
-
-	if params.Operator != nil {
-		filter.Operator = params.Operator
-	}
-	if params.Method != nil {
-		m := string(*params.Method)
-		filter.Method = &m
-	}
-	if params.ApprovalState != nil {
-		a := string(*params.ApprovalState)
-		filter.ApprovalState = &a
-	}
-
-	// Resolve effective limit first (store default: 50)
-	effectiveLimit := 50
-	if params.Limit != nil {
-		effectiveLimit = *params.Limit
-	}
-	filter.Limit = effectiveLimit
-
-	// Validate and compute offset
-	if params.Page != nil {
-		page := *params.Page
-		if page < 1 {
-			h.respondError(w, r, http.StatusBadRequest, "Invalid page parameter", fmt.Errorf("page must be >= 1, got %d", page))
-			return
-		}
-		if page > 1 {
-			// Check for overflow: (page-1) * effectiveLimit
-			if page-1 > (1<<31-1)/effectiveLimit {
-				h.respondError(w, r, http.StatusBadRequest, "Invalid page parameter", fmt.Errorf("page %d too large", page))
-				return
-			}
-			filter.Offset = (page - 1) * effectiveLimit
-		}
-	}
-
-	if params.Since != nil {
-		t, err := parseSince(*params.Since)
-		if err != nil {
-			h.respondError(w, r, http.StatusBadRequest, "Invalid since parameter", err)
-			return
-		}
-		filter.Since = t
-	}
-
-	result, err := h.store.ListAuditEntries(r.Context(), filter)
-	if err != nil {
-		h.respondError(w, r, http.StatusInternalServerError, "Failed to list audit entries", err)
-		return
-	}
-
-	items := make([]openapi.AuditEntry, 0, len(result.Items))
-	for _, entry := range result.Items {
-		items = append(items, entry.ToOpenAPI())
-	}
-
-	page := result.Offset/result.Limit + 1
-	render.JSON(w, r, openapi.AuditList{
-		Kind:    openapi.AuditListKindAuditList,
-		Total:   result.Total,
-		Page:    page,
-		Limit:   result.Limit,
-		HasMore: result.Offset+len(items) < result.Total,
-		Items:   items,
-	})
 }
 
 // ListExecutions implements GET /runs

@@ -24,7 +24,6 @@ info:
 
     4. Retrieve results — `GET /runs/{id}?include=output,logs` (opt-in content)
 
-    5. Audit and reporting — `GET /runs` (filter executions) or `GET /audit` (API call log)
 servers:
   - url: '{gateway}/api/v0/trusted-actions'
     description: Trusted Actions API Gateway
@@ -37,8 +36,6 @@ tags:
     description: Discover and describe available Trusted Actions
   - name: Executions
     description: Execute Trusted Actions and retrieve results
-  - name: Audit
-    description: API call audit log
 paths:
   /:
     $ref: paths/catalog.yaml
@@ -52,8 +49,6 @@ paths:
     $ref: 'paths/runs@{exec_id}@output.yaml'
   /runs:
     $ref: paths/runs.yaml
-  /audit:
-    $ref: paths/audit.yaml
 components:
   securitySchemes:
     ocm_jwt:

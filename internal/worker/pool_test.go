@@ -56,12 +56,6 @@ func (f *fakeStore) ListExecutions(ctx context.Context, filter store.ExecutionFi
 	return &store.ExecutionListResult{}, nil
 }
 
-func (f *fakeStore) CreateAuditEntry(ctx context.Context, entry *models.AuditEntry) error { return nil }
-
-func (f *fakeStore) ListAuditEntries(ctx context.Context, filter store.AuditFilter) (*store.AuditListResult, error) {
-	return &store.AuditListResult{}, nil
-}
-
 func (f *fakeStore) Close() error { return nil }
 
 // fakeRunner records processed executions on a channel so tests can wait for them.

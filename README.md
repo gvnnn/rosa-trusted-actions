@@ -229,7 +229,6 @@ Base path: `/api/v0/trusted-actions`
 - `POST /{action}/run` - Execute a Trusted Action
 - `GET /runs` - List executions
 - `GET /runs/{id}` - Get execution details
-- `GET /audit` - API call audit log
 - `GET /health` - Health check
 
 ## Project Structure

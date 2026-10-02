@@ -34,24 +34,6 @@ type ExecutionListResult struct {
 	Offset int
 }
 
-type AuditFilter struct {
-	Action        *string
-	Target        *string
-	Operator      *string
-	Method        *string
-	ApprovalState *string
-	Since         *time.Time
-	Limit         int
-	Offset        int
-}
-
-type AuditListResult struct {
-	Items  []models.AuditEntry
-	Total  int
-	Limit  int
-	Offset int
-}
-
 type Store interface {
 	CreateExecution(ctx context.Context, exec *models.Execution) error
 	GetExecution(ctx context.Context, id uuid.UUID) (*models.Execution, error)
@@ -62,9 +44,6 @@ type Store interface {
 	// transitioning it to running, for a worker to process. Returns
 	// ErrNotFound if no execution is pending.
 	ClaimNextExecution(ctx context.Context) (*models.Execution, error)
-
-	CreateAuditEntry(ctx context.Context, entry *models.AuditEntry) error
-	ListAuditEntries(ctx context.Context, filter AuditFilter) (*AuditListResult, error)
 
 	Close() error
 }

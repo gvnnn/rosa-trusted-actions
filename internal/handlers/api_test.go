@@ -529,28 +529,6 @@ func TestAPIHandler_ListExecutions_InvalidPage(t *testing.T) {
 	}
 }
 
-func TestAPIHandler_ListAuditEntries_Empty(t *testing.T) {
-	handler := newTestHandler(t)
-
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v0/trusted-actions/audit", nil)
-	w := httptest.NewRecorder()
-
-	handler.ListAuditEntries(w, req, openapi.ListAuditEntriesParams{})
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
-
-	var list openapi.AuditList
-	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-
-	if list.Total != 0 {
-		t.Errorf("Expected total 0, got %d", list.Total)
-	}
-}
-
 func TestAPIHandler_ListExecutions_NegativeSince(t *testing.T) {
 	handler := newTestHandler(t)
 

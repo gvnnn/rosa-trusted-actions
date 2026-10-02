@@ -315,70 +315,6 @@ func (s *SQLiteStore) ClaimNextExecution(ctx context.Context) (*models.Execution
 	return raw.toModel()
 }
 
-func (s *SQLiteStore) CreateAuditEntry(ctx context.Context, entry *models.AuditEntry) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO audit_entries (
-			id, timestamp, method, path, username, status_code,
-			action, execution_id, jira, approval_state, target_cluster
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		entry.ID.String(),
-		entry.Timestamp.UTC().Format(timeLayout),
-		entry.Method, entry.Path, entry.Username, entry.StatusCode,
-		entry.Action, entry.ExecutionID, entry.Jira, entry.ApprovalState, entry.TargetCluster,
-	)
-	if err != nil {
-		return fmt.Errorf("inserting audit entry: %w", err)
-	}
-	return nil
-}
-
-func (s *SQLiteStore) ListAuditEntries(ctx context.Context, filter AuditFilter) (*AuditListResult, error) {
-	where, args := buildAuditWhere(filter)
-
-	whereClause := ""
-	if len(where) > 0 {
-		whereClause = "WHERE " + strings.Join(where, " AND ")
-	}
-
-	var total int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM audit_entries %s", whereClause)
-	if err := s.db.GetContext(ctx, &total, countQuery, args...); err != nil {
-		return nil, fmt.Errorf("counting audit entries: %w", err)
-	}
-
-	limit := filter.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-
-	offset := filter.Offset
-	if offset < 0 {
-		offset = 0
-	}
-
-	query := fmt.Sprintf("SELECT %s FROM audit_entries %s ORDER BY timestamp DESC, id ASC LIMIT ? OFFSET ?", auditColumns, whereClause)
-	args = append(args, limit, offset)
-
-	var rows []auditRow
-	if err := s.db.SelectContext(ctx, &rows, query, args...); err != nil {
-		return nil, fmt.Errorf("listing audit entries: %w", err)
-	}
-
-	items := make([]models.AuditEntry, 0, len(rows))
-	for _, row := range rows {
-		entry, err := row.toModel()
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, *entry)
-	}
-
-	return &AuditListResult{Items: items, Total: total, Limit: limit, Offset: offset}, nil
-}
-
 const executionColumns = `id, action, status, approval_state, username, target_cluster,
 	jira, dry_run, force, params, scope, type, revision,
 	manifest_work_name,
@@ -488,46 +424,6 @@ func (r *executionOutputRow) toModel() (*models.ExecutionOutput, error) {
 	}, nil
 }
 
-type auditRow struct {
-	ID            string  `db:"id"`
-	Timestamp     string  `db:"timestamp"`
-	Method        string  `db:"method"`
-	Path          string  `db:"path"`
-	Username      string  `db:"username"`
-	StatusCode    int     `db:"status_code"`
-	Action        *string `db:"action"`
-	ExecutionID   *string `db:"execution_id"`
-	Jira          *string `db:"jira"`
-	ApprovalState *string `db:"approval_state"`
-	TargetCluster *string `db:"target_cluster"`
-}
-
-func (r *auditRow) toModel() (*models.AuditEntry, error) {
-	id, err := uuid.Parse(r.ID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing audit entry id: %w", err)
-	}
-
-	ts, err := time.Parse(timeLayout, r.Timestamp)
-	if err != nil {
-		return nil, fmt.Errorf("parsing timestamp: %w", err)
-	}
-
-	return &models.AuditEntry{
-		ID:            id,
-		Timestamp:     ts,
-		Method:        r.Method,
-		Path:          r.Path,
-		Username:      r.Username,
-		StatusCode:    r.StatusCode,
-		Action:        r.Action,
-		ExecutionID:   r.ExecutionID,
-		Jira:          r.Jira,
-		ApprovalState: r.ApprovalState,
-		TargetCluster: r.TargetCluster,
-	}, nil
-}
-
 func buildExecutionWhere(filter ExecutionFilter) ([]string, []interface{}) {
 	var clauses []string
 	var args []interface{}
@@ -570,38 +466,6 @@ func buildExecutionWhere(filter ExecutionFilter) ([]string, []interface{}) {
 	}
 	if filter.Since != nil {
 		clauses = append(clauses, "created_at >= ?")
-		args = append(args, filter.Since.UTC().Format(timeLayout))
-	}
-
-	return clauses, args
-}
-
-func buildAuditWhere(filter AuditFilter) ([]string, []interface{}) {
-	var clauses []string
-	var args []interface{}
-
-	if filter.Action != nil {
-		clauses = append(clauses, "action = ?")
-		args = append(args, *filter.Action)
-	}
-	if filter.Target != nil {
-		clauses = append(clauses, "target_cluster = ?")
-		args = append(args, *filter.Target)
-	}
-	if filter.Operator != nil {
-		clauses = append(clauses, "username = ?")
-		args = append(args, *filter.Operator)
-	}
-	if filter.Method != nil {
-		clauses = append(clauses, "method = ?")
-		args = append(args, *filter.Method)
-	}
-	if filter.ApprovalState != nil {
-		clauses = append(clauses, "approval_state = ?")
-		args = append(args, *filter.ApprovalState)
-	}
-	if filter.Since != nil {
-		clauses = append(clauses, "timestamp >= ?")
 		args = append(args, filter.Since.UTC().Format(timeLayout))
 	}
 
