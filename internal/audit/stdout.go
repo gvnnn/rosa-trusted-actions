@@ -34,7 +34,7 @@ func NewStdoutSink(w io.Writer) *StdoutSink {
 	return &StdoutSink{w: w}
 }
 
-func (s *StdoutSink) Name() string { return "stdout" }
+func (s *StdoutSink) Name() string { return SinkStdout }
 
 func (s *StdoutSink) Write(_ context.Context, rec Record) error {
 	data, err := Encode(rec)

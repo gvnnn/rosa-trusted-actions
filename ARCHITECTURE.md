@@ -84,6 +84,8 @@ The `config.Config` struct separates:
 - `ROSA_TA_WORKER_EXECUTION_TIMEOUT`: Max time allowed for an execution to process
 - `ROSA_TA_ALLOWED_NAMESPACES`: Namespaces which can be targeted by actions
 - `ROSA_TA_ALLOWED_SECRETS`: Secrets which can be used by actions
+- `ROSA_TA_AUDIT_SINKS`: Audit sinks for best-effort delivery
+- `ROSA_TA_AUDIT_REQUIRED_SINKS`: Audit sinks that require delivery prior to any privileged action execution
 
 ### Configuration file
 
@@ -101,6 +103,11 @@ actions:
     allowed_secrets:
       - openshift-logging/collector-config
       - openshift-monitoring/alertmanager-config
+audit:
+  sinks:
+    - stdout
+  required:
+    - stdout
 ```
 
 ## Security

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openshift-online/rosa-trusted-actions/internal/audit"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,6 +75,14 @@ type Config struct {
 	AllowedNamespaces []string
 	AllowedSecrets    []string
 
+	// Audit Configuration
+	// AuditSinks lists every configured audit destination, e.g. "stdout" or
+	// "file:/var/log/rosa-ta/audit.jsonl".
+	AuditSinks []string
+	// AuditRequiredSinks is the subset of AuditSinks that must accept a record
+	// before a privileged action may run. Must be non-empty.
+	AuditRequiredSinks []string
+
 	// Development / local-testing flags
 	// EnableAuth controls whether OCM JWT validation and AMS role checks are
 	// enforced. Defaults to true. Set ROSA_TA_AUTH=disabled to use the
@@ -92,6 +101,11 @@ type configFile struct {
 		AllowedNamespaces []string `yaml:"allowed_namespaces"`
 		AllowedSecrets    []string `yaml:"allowed_secrets"`
 	} `yaml:"actions"`
+
+	Audit struct {
+		Sinks    []string `yaml:"sinks"`
+		Required []string `yaml:"required"`
+	} `yaml:"audit"`
 }
 
 func readConfigFile(configFilePath string) *configFile {
@@ -100,6 +114,9 @@ func readConfigFile(configFilePath string) *configFile {
 	configFile.Workers.Concurrency = 4
 	configFile.Workers.PollInterval = 5 * time.Second
 	configFile.Workers.ExecutionTimeout = 2 * time.Minute
+
+	configFile.Audit.Sinks = []string{audit.SinkStdout}
+	configFile.Audit.Required = []string{audit.SinkStdout}
 
 	if configFilePath != "" {
 		data, err := os.ReadFile(configFilePath)
@@ -187,6 +204,10 @@ func Load(configFilePath string) *Config {
 		// Actions Configuration
 		AllowedNamespaces: getStringSliceEnv("ROSA_TA_ALLOWED_NAMESPACES", configFile.Actions.AllowedNamespaces),
 		AllowedSecrets:    getStringSliceEnv("ROSA_TA_ALLOWED_SECRETS", configFile.Actions.AllowedSecrets),
+
+		// Audit Sinks Configuration
+		AuditSinks:         getStringSliceEnv("ROSA_TA_AUDIT_SINKS", configFile.Audit.Sinks),
+		AuditRequiredSinks: getStringSliceEnv("ROSA_TA_AUDIT_REQUIRED_SINKS", configFile.Audit.Required),
 
 		// Development flags
 		AuthPolicy: authPolicy,

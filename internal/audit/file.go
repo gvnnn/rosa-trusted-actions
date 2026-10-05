@@ -33,7 +33,7 @@ func NewFileSink(path string) (*FileSink, error) {
 	return &FileSink{path: path, f: f}, nil
 }
 
-func (s *FileSink) Name() string { return "file:" + s.path }
+func (s *FileSink) Name() string { return SinkFilePrefix + s.path }
 
 func (s *FileSink) Write(_ context.Context, rec Record) error {
 	data, err := Encode(rec)
