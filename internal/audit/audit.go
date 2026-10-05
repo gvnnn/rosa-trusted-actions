@@ -49,10 +49,6 @@ type Record struct {
 	RequestID   string `json:"request_id,omitempty"`
 }
 
-type Logger interface {
-	Log(record Record)
-}
-
 // Sink is a destination for audit records. Implementations must be safe for
 // concurrent use and must not retry internally: retry policy belongs to the
 // Auditor so it applies uniformly across sinks.

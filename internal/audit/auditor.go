@@ -42,10 +42,14 @@ func NewAuditor(logger *logrus.Logger, required, bestEffort []Sink) *Auditor {
 // Deliver records something that already happened. It never blocks the caller
 // and never fails the operation: delivery is retried with backoff in the
 // background, and exhaustion logs at Error and increments the failure counter.
-func (a *Auditor) Deliver(rec Record) {
+//
+// ctx is used for its values only — deliverAsync strips cancellation and the
+// deadline, so a request context being cancelled when the response is written
+// does not abort the delivery.
+func (a *Auditor) Deliver(ctx context.Context, rec Record) {
 	rec = a.stamp(rec)
-	a.deliverAsync(context.Background(), rec, a.required)
-	a.deliverAsync(context.Background(), rec, a.bestEffort)
+	a.deliverAsync(ctx, rec, a.required)
+	a.deliverAsync(ctx, rec, a.bestEffort)
 }
 
 // WriteRequired writes rec to every required sink synchronously and returns

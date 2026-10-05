@@ -175,19 +175,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Execution pipeline — authorization, audit, and cluster access used to
 	// actually run a claimed action. Mirrors cmd/action-cli/main.go.
 	//
-	// audit.NewMockLogger only logs; there is no persistent audit backend for
-	// executed actions yet (separate from the request-level audit log written
-	// via middleware.NewAuditLogger).
-	//
-	// TODO: unify internal/audit.Logger (per-action decision/outcome, e.g.
-	// authorization denials and RBAC-scoped execution results) with the
-	// request-level audit log in internal/middleware+store (persisted
-	// AuditEntry rows queryable via GET /audit). These predate the DB (audit
-	// package from the cmd/action-cli era, pre-HTTP-server) and were never
-	// merged into one persisted trail.
+	// Audit sinks are split in two: required sinks must accept a record before a
+	// privileged action runs, and a failure there aborts the action; best-effort
+	// sinks are delivered in the background with retry. A misconfigured sink is
+	// fatal at startup rather than at the first action.
 	// -------------------------------------------------------------------------
 	actionAuthorizer := authorization.New(logger, cfg.AllowedNamespaces, cfg.AllowedSecrets)
-	actionAuditor := audit.NewMockLogger(logger)
+	requiredSinks, bestEffortSinks, err := audit.BuildSinks(cfg.AuditSinks, cfg.AuditRequiredSinks)
+	if err != nil {
+		logger.WithError(err).Fatal("Invalid audit sink configuration")
+	}
+	actionAuditor := audit.NewAuditor(logger, requiredSinks, bestEffortSinks)
 
 	var bp backplane.ClientProvider
 	if cfg.Kubeconfig != "" {
@@ -238,7 +236,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"healthy","version":"%s","build_date":"%s","git_commit":"%s"}`, version, buildDate, gitCommit)
+		fmt.Fprintf(w, `{"status":"healthy","version":"%s","build_date":"%s","git_commit":"%s",`+
+			`"audit":{"required_sinks":%d,"delivery_failures":%d}}`,
+			version, buildDate, gitCommit, len(requiredSinks), actionAuditor.Failures())
 	})
 
 	// API routes — authn and authz applied as chi middleware so the entire
@@ -330,6 +330,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 	case <-workersDone:
 	case <-ctx.Done():
 		logger.Warn("Timed out waiting for worker pool to finish in-flight executions")
+	}
+
+	if err := actionAuditor.Close(ctx); err != nil {
+		logger.WithError(err).Error("Audit deliveries abandoned at shutdown")
 	}
 
 	logger.Info("Server stopped")

@@ -81,7 +81,17 @@ func main() {
 			}
 			secList := splitCSV(allowedSecrets)
 
-			auditor := audit.NewMockLogger(logger)
+			auditor := audit.NewAuditor(logger, []audit.Sink{audit.NewStdoutSink(nil)}, nil)
+			// Deliver only spawns the delivery goroutines. Without this the
+			// process exits before the first write lands and the CLI produces
+			// no audit output at all.
+			defer func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := auditor.Close(ctx); err != nil {
+					logger.WithError(err).Error("Audit deliveries abandoned at exit")
+				}
+			}()
 			authz := authorization.New(logger, nsList, secList)
 			bp := backplane.NewKubeconfigProvider(logger, kubeconfig)
 			exec := executor.New(logger, authz, auditor, bp)

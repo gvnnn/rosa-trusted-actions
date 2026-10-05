@@ -3,7 +3,11 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io"
+	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -33,11 +37,58 @@ func (f *fakeClientProvider) GetPodExecutor(_ context.Context, _ string, _ []bac
 	return nil, fmt.Errorf("not implemented in test fake")
 }
 
-func newTestExecutor(namespaces, secrets []string, bp backplane.ClientProvider) (*Executor, *audit.MockLogger) {
+// auditSpy is an Auditor wired to a recording sink. Deliver is asynchronous,
+// so records() flushes before returning - reading the sink directly races the
+// delivery goroutine and fails under -race.
+type auditSpy struct {
+	*audit.Auditor
+	sink *recordingSink
+}
+
+func (s *auditSpy) records(t *testing.T) []audit.Record {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.Close(ctx); err != nil {
+		t.Fatalf("flushing auditor: %v", err)
+	}
+
+	return s.sink.Records()
+}
+
+// recordingSink collects records.
+type recordingSink struct {
+	name    string
+	mu      sync.Mutex
+	records []audit.Record
+}
+
+func (s *recordingSink) Name() string { return s.name }
+
+func (s *recordingSink) Write(_ context.Context, rec audit.Record) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.records = append(s.records, rec)
+	return nil
+}
+
+// Records returns a copy. Returning the slice itself would race with
+// an in-flight background delivery under -race.
+func (s *recordingSink) Records() []audit.Record {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.records)
+}
+
+func newTestExecutor(namespaces, secrets []string, bp backplane.ClientProvider) (*Executor, *auditSpy) {
 	logger := logrus.New()
-	auditor := audit.NewMockLogger(logger)
+	logger.SetOutput(io.Discard)
+	sink := &recordingSink{name: "recording"}
+	auditor := audit.NewAuditor(logger, []audit.Sink{sink}, nil)
 	authz := authorization.New(logger, namespaces, secrets)
-	return New(logger, authz, auditor, bp), auditor
+	return New(logger, authz, auditor, bp), &auditSpy{auditor, sink}
 }
 
 func newFakeClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
@@ -77,6 +128,8 @@ func TestExecutor_HappyPath_Get(t *testing.T) {
 		Target:    testTarget,
 	})
 
+	records := auditor.records(t)
+
 	if !result.Allowed {
 		t.Errorf("expected allowed, got denied: %s", result.Reason)
 	}
@@ -89,14 +142,14 @@ func TestExecutor_HappyPath_Get(t *testing.T) {
 	if len(result.Output.Resources) != 1 {
 		t.Errorf("expected 1 resource, got %d", len(result.Output.Resources))
 	}
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
-	if auditor.Records[0].Decision != audit.DecisionAllowed {
-		t.Errorf("expected audit decision %q, got %q", audit.DecisionAllowed, auditor.Records[0].Decision)
+	if records[0].Decision != audit.DecisionAllowed {
+		t.Errorf("expected audit decision %q, got %q", audit.DecisionAllowed, records[0].Decision)
 	}
-	if auditor.Records[0].Outcome != audit.OutcomeSuccess {
-		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeSuccess, auditor.Records[0].Outcome)
+	if records[0].Outcome != audit.OutcomeSuccess {
+		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeSuccess, records[0].Outcome)
 	}
 }
 
@@ -114,17 +167,19 @@ func TestExecutor_DeniedNamespace(t *testing.T) {
 		Target:    target,
 	})
 
+	records := auditor.records(t)
+
 	if result.Allowed {
 		t.Error("expected denied, got allowed")
 	}
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
-	if auditor.Records[0].Decision != audit.DecisionDenied {
-		t.Errorf("expected audit decision %q, got %q", audit.DecisionDenied, auditor.Records[0].Decision)
+	if records[0].Decision != audit.DecisionDenied {
+		t.Errorf("expected audit decision %q, got %q", audit.DecisionDenied, records[0].Decision)
 	}
-	if auditor.Records[0].Outcome != audit.OutcomeSkipped {
-		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeSkipped, auditor.Records[0].Outcome)
+	if records[0].Outcome != audit.OutcomeSkipped {
+		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeSkipped, records[0].Outcome)
 	}
 }
 
@@ -147,14 +202,16 @@ func TestExecutor_DeniedSecret(t *testing.T) {
 		Target:    target,
 	})
 
+	records := auditor.records(t)
+
 	if result.Allowed {
 		t.Error("expected secret to be denied, got allowed")
 	}
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
-	if auditor.Records[0].Decision != audit.DecisionDenied {
-		t.Errorf("expected audit decision %q, got %q", audit.DecisionDenied, auditor.Records[0].Decision)
+	if records[0].Decision != audit.DecisionDenied {
+		t.Errorf("expected audit decision %q, got %q", audit.DecisionDenied, records[0].Decision)
 	}
 }
 
@@ -191,17 +248,19 @@ func TestExecutor_AllowedSecret(t *testing.T) {
 		Target:    target,
 	})
 
+	records := auditor.records(t)
+
 	if !result.Allowed {
 		t.Errorf("expected allowed for allow-listed secret, got denied: %s", result.Reason)
 	}
 	if result.Error != nil {
 		t.Errorf("unexpected error: %v", result.Error)
 	}
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
-	if auditor.Records[0].Decision != audit.DecisionAllowed {
-		t.Errorf("expected audit decision %q, got %q", audit.DecisionAllowed, auditor.Records[0].Decision)
+	if records[0].Decision != audit.DecisionAllowed {
+		t.Errorf("expected audit decision %q, got %q", audit.DecisionAllowed, records[0].Decision)
 	}
 }
 
@@ -216,17 +275,19 @@ func TestExecutor_BackplaneError(t *testing.T) {
 		Target:    testTarget,
 	})
 
+	records := auditor.records(t)
+
 	if !result.Allowed {
 		t.Error("expected allowed (auth passed), got denied")
 	}
 	if result.Error == nil {
 		t.Error("expected error from backplane failure, got nil")
 	}
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
-	if auditor.Records[0].Outcome != audit.OutcomeFailure {
-		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeFailure, auditor.Records[0].Outcome)
+	if records[0].Outcome != audit.OutcomeFailure {
+		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeFailure, records[0].Outcome)
 	}
 }
 
@@ -244,17 +305,19 @@ func TestExecutor_ActionError(t *testing.T) {
 		Target:    target,
 	})
 
+	records := auditor.records(t)
+
 	if !result.Allowed {
 		t.Error("expected allowed (auth passed), got denied")
 	}
 	if result.Error == nil {
 		t.Error("expected error from action failure, got nil")
 	}
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
-	if auditor.Records[0].Outcome != audit.OutcomeFailure {
-		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeFailure, auditor.Records[0].Outcome)
+	if records[0].Outcome != audit.OutcomeFailure {
+		t.Errorf("expected audit outcome %q, got %q", audit.OutcomeFailure, records[0].Outcome)
 	}
 }
 
@@ -270,11 +333,13 @@ func TestExecutor_AuditRecordFields(t *testing.T) {
 		Target:    testTarget,
 	})
 
-	if len(auditor.Records) != 1 {
-		t.Fatalf("expected 1 audit record, got %d", len(auditor.Records))
+	records := auditor.records(t)
+
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
 	}
 
-	rec := auditor.Records[0]
+	rec := records[0]
 	if rec.CallerID != "srep-user" {
 		t.Errorf("expected caller %q, got %q", "srep-user", rec.CallerID)
 	}

@@ -213,7 +213,7 @@ func TestAuditor_Deliver_WritesToAllSinks(t *testing.T) {
 
 	a := NewAuditor(testLogger(), []Sink{required}, []Sink{bestEffort})
 
-	a.Deliver(Record{Event: EventActionCompleted})
+	a.Deliver(context.Background(), Record{Event: EventActionCompleted})
 	closeAuditor(t, a)
 
 	// The required/best-effort split governs WriteRequired only. By the time
@@ -237,7 +237,7 @@ func TestAuditor_Deliver_SequenceIsGapless(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a.Deliver(Record{Event: EventActionCompleted})
+			a.Deliver(context.Background(), Record{Event: EventActionCompleted})
 		}()
 	}
 	wg.Wait()
@@ -270,7 +270,7 @@ func TestAuditor_Deliver_RetriesThenCountsFailure(t *testing.T) {
 	a := NewAuditor(testLogger(), nil, []Sink{faulty})
 	a.baseDelay = time.Millisecond
 
-	a.Deliver(Record{Event: EventActionCompleted})
+	a.Deliver(context.Background(), Record{Event: EventActionCompleted})
 	closeAuditor(t, a)
 
 	if got := faulty.Writes(); got != a.maxAttempts {
@@ -287,7 +287,7 @@ func TestAuditor_Deliver_SucceedsAfterRetry(t *testing.T) {
 	a := NewAuditor(testLogger(), nil, []Sink{flaky})
 	a.baseDelay = time.Millisecond
 
-	a.Deliver(Record{Event: EventActionCompleted})
+	a.Deliver(context.Background(), Record{Event: EventActionCompleted})
 	closeAuditor(t, a)
 
 	if got := flaky.Writes(); got != 3 {
@@ -302,7 +302,7 @@ func TestAuditor_Close_FlushesInFlightDeliveries(t *testing.T) {
 	sink := &slowSink{delay: 50 * time.Millisecond}
 	a := NewAuditor(testLogger(), nil, []Sink{sink})
 
-	a.Deliver(Record{Event: EventActionCompleted})
+	a.Deliver(context.Background(), Record{Event: EventActionCompleted})
 	closeAuditor(t, a)
 
 	if got := sink.Count(); got != 1 {
@@ -313,7 +313,7 @@ func TestAuditor_Close_FlushesInFlightDeliveries(t *testing.T) {
 func TestAuditor_Close_ReturnsErrorWhenDeliveriesOutlastContext(t *testing.T) {
 	a := NewAuditor(testLogger(), nil, []Sink{&slowSink{delay: 200 * time.Millisecond}})
 
-	a.Deliver(Record{Event: EventActionCompleted})
+	a.Deliver(context.Background(), Record{Event: EventActionCompleted})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()

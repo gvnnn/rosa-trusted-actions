@@ -56,7 +56,7 @@ func newTestRunner(namespaces []string, bp backplane.ClientProvider) *ExecutorRu
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	authz := authorization.New(logger, namespaces, nil)
-	auditor := audit.NewMockLogger(logger)
+	auditor := audit.NewAuditor(logger, nil, nil)
 	exec := executor.New(logger, authz, auditor, bp)
 	return NewExecutorRunner(logger, exec, 5*time.Second)
 }
@@ -202,7 +202,7 @@ func TestExecutorRunner_Run_RespectsExecutionTimeout(t *testing.T) {
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	authz := authorization.New(logger, []string{"openshift-monitoring"}, nil)
-	auditor := audit.NewMockLogger(logger)
+	auditor := audit.NewAuditor(logger, nil, nil)
 	exec := executor.New(logger, authz, auditor, &slowClientProvider{})
 	runner := NewExecutorRunner(logger, exec, 20*time.Millisecond)
 

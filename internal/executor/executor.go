@@ -32,14 +32,14 @@ type Result struct {
 type Executor struct {
 	logger     *logrus.Logger
 	authorizer authorization.Authorizer
-	auditor    audit.Logger
+	auditor    *audit.Auditor
 	backplane  backplane.ClientProvider
 }
 
 func New(
 	logger *logrus.Logger,
 	authorizer authorization.Authorizer,
-	auditor audit.Logger,
+	auditor *audit.Auditor,
 	bp backplane.ClientProvider,
 ) *Executor {
 	return &Executor{
@@ -58,7 +58,7 @@ func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
 		Target:    req.Target,
 		ClusterID: req.ClusterID,
 	}
-	defer func() { e.auditor.Log(rec) }()
+	defer func() { e.auditor.Deliver(ctx, rec) }()
 
 	authResult := e.authorizer.Authorize(authorization.Request{
 		Namespace:     req.Target.Namespace,
