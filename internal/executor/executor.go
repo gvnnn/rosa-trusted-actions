@@ -2,8 +2,8 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -13,7 +13,14 @@ import (
 	"github.com/openshift-online/rosa-trusted-actions/internal/backplane"
 )
 
+// ErrAuditUnavailable means no privileged side effect was attempted: the
+// required audit sinks would not accept the pre-execution record, so the
+// action was refused rather than run unrecorded.
+var ErrAuditUnavailable = errors.New("audit trail unavailable; action not executed")
+
 type Request struct {
+	// ExecutionID ties the action.attempted and action.completed records
+	ExecutionID    string
 	CallerID       string
 	ClusterID      string
 	ClusterVersion string
@@ -51,14 +58,16 @@ func New(
 }
 
 func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
-	rec := audit.Record{
-		Timestamp: time.Now(),
-		CallerID:  req.CallerID,
-		Action:    req.Action.Name(),
-		Target:    req.Target,
-		ClusterID: req.ClusterID,
+	// Timestamp is deliberately left zero: Auditor.stamp fills it at emit
+	// time, so each record carries when *it* happened rather than when
+	// Execute started
+	base := audit.Record{
+		ExecutionID: req.ExecutionID,
+		CallerID:    req.CallerID,
+		Action:      req.Action.Name(),
+		Target:      req.Target,
+		ClusterID:   req.ClusterID,
 	}
-	defer func() { e.auditor.Deliver(ctx, rec) }()
 
 	authResult := e.authorizer.Authorize(authorization.Request{
 		Namespace:     req.Target.Namespace,
@@ -68,16 +77,52 @@ func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
 	})
 
 	if !authResult.Allowed {
-		rec.Decision = audit.DecisionDenied
-		rec.DenyReason = authResult.Reason
-		rec.Outcome = audit.OutcomeSkipped
+		denied := base
+		denied.Event = audit.EventActionDenied
+		denied.Decision = audit.DecisionDenied
+		denied.DenyReason = authResult.Reason
+		denied.Outcome = audit.OutcomeSkipped
+		// Deliberately not fail-closed: a denial has no side effect to
+		// prevent, losing one is an audit gap rather than a safety breach,
+		// and there is no coherent way to refuse to deny.
+		e.auditor.Deliver(ctx, denied)
+
+		return &Result{Allowed: false, Reason: authResult.Reason}
+	}
+
+	base.Decision = audit.DecisionAllowed
+
+	// The invariant: this record must be durable before anything privileged
+	// happens. Nothing below this line runs if it is not.
+	attempted := base
+	attempted.Event = audit.EventActionAttempted
+	if err := e.auditor.WriteRequired(ctx, attempted); err != nil {
+		e.logger.WithFields(logrus.Fields{
+			"caller":       req.CallerID,
+			"action":       req.Action.Name(),
+			"cluster_id":   req.ClusterID,
+			"execution_id": req.ExecutionID,
+		}).WithError(err).Error("Audit trail unavailable; refusing to execute")
+
+		// Allowed stays true: authorization permitted this. Reporting it as
+		// denied would misattribute an infrastructure failure to the caller's
+		// permissions and corrupt denial metrics.
 		return &Result{
-			Allowed: false,
+			Allowed: true,
 			Reason:  authResult.Reason,
+			Error:   ErrAuditUnavailable,
 		}
 	}
 
-	rec.Decision = audit.DecisionAllowed
+	// Past this point a side effect may occur, so a completion record is owed
+	// however the action exits. The closure captures the variable, so the
+	// mutations below are visible when it runs.
+	//
+	// Do not move this defer before the WriteRequired call above, least
+	// audit sink failures might still emit an action.completed event.
+	completed := base
+	completed.Event = audit.EventActionCompleted
+	defer func() { e.auditor.Deliver(ctx, completed) }()
 
 	// Each primitive action gets its own backplane session scoped to exactly the
 	// RBAC it needs (least-privilege). Composite actions could merge RBAC rules
@@ -86,8 +131,8 @@ func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
 	rbacRules := req.Action.RequiredRBAC(req.Target)
 	client, err := e.backplane.GetClient(ctx, req.ClusterID, rbacRules)
 	if err != nil {
-		rec.Outcome = audit.OutcomeFailure
-		rec.Error = err.Error()
+		completed.Outcome = audit.OutcomeFailure
+		completed.Error = err.Error()
 		return &Result{
 			Allowed: true,
 			Reason:  authResult.Reason,
@@ -100,8 +145,8 @@ func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
 	if req.Action.UsesPodExec() {
 		podExec, podErr := e.backplane.GetPodExecutor(ctx, req.ClusterID, rbacRules)
 		if podErr != nil {
-			rec.Outcome = audit.OutcomeFailure
-			rec.Error = podErr.Error()
+			completed.Outcome = audit.OutcomeFailure
+			completed.Error = podErr.Error()
 			return &Result{
 				Allowed: true,
 				Reason:  authResult.Reason,
@@ -118,8 +163,8 @@ func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
 	}
 	output, err := req.Action.Execute(ctx, clients, actionReq)
 	if err != nil {
-		rec.Outcome = audit.OutcomeFailure
-		rec.Error = err.Error()
+		completed.Outcome = audit.OutcomeFailure
+		completed.Error = err.Error()
 		return &Result{
 			Allowed: true,
 			Reason:  authResult.Reason,
@@ -127,7 +172,7 @@ func (e *Executor) Execute(ctx context.Context, req Request) (result *Result) {
 		}
 	}
 
-	rec.Outcome = audit.OutcomeSuccess
+	completed.Outcome = audit.OutcomeSuccess
 	return &Result{
 		Allowed: true,
 		Reason:  authResult.Reason,

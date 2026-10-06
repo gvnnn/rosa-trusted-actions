@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -111,6 +112,7 @@ func main() {
 			}
 
 			result := exec.Execute(context.Background(), executor.Request{
+				ExecutionID:    uuid.NewString(),
 				CallerID:       callerID,
 				ClusterID:      clusterID,
 				ClusterVersion: clusterVersion,

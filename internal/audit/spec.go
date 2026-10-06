@@ -24,7 +24,7 @@ const (
 func BuildSinks(sinks, required []string) (req, bestEffort []Sink, err error) {
 	if len(required) == 0 {
 		return nil, nil, fmt.Errorf(
-			"no required audit sinks configured: at least one sink must confirm a record before a priviledged action may run")
+			"no required audit sinks configured: at least one sink must confirm a record before a privileged action may run")
 	}
 
 	isRequired := make(map[string]bool, len(required))
@@ -65,7 +65,7 @@ func BuildSinks(sinks, required []string) (req, bestEffort []Sink, err error) {
 // "file:./audit.jsonl" and "file:audit.jsonl" are the same file, and opening
 // it twice would double every record.
 func canonicalSpec(spec string) string {
-	if path, ok := strings.CutPrefix(spec, SinkFilePrefix); ok {
+	if path, ok := strings.CutPrefix(spec, SinkFilePrefix); ok && spec != "" {
 		return SinkFilePrefix + filepath.Clean(path)
 	}
 	return spec

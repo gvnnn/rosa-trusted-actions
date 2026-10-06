@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -101,6 +102,12 @@ func (r *ExecutorRunner) Run(ctx context.Context, exec *models.Execution) RunRes
 		log.WithField("reason", result.Reason).Warn("claimed execution denied by authorizer")
 		return runResultError(fmt.Errorf("denied: %s", result.Reason))
 	}
+
+	if errors.Is(result.Error, executor.ErrAuditUnavailable) {
+		log.WithError(result.Error).Error("audit trail unavailable; execution refused without running")
+		return runResultError(result.Error)
+	}
+
 	if result.Error != nil {
 		log.WithError(result.Error).Error("claimed execution failed")
 		return runResultError(result.Error)
